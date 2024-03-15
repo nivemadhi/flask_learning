@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-
+import datetime
 
 clinics = {"sanomed":
             {
@@ -25,7 +25,7 @@ clinics = {"sanomed":
                                 "2024-03-17": ["9:30 AM", "10:30 AM", "11:30 AM", "1:00 PM"],
                                 },
             "reviews": ["worst clinic ever!!!", "nivedha is doing this herself"],
-            }
+            },
            }
         
 
@@ -83,7 +83,48 @@ def register():
 
 @app.route('/home')
 def home():
-    return render_template("homepage.html", clinics=clinics)
+    # Collect all appointments from all clinics
+    all_appointments = []
+
+    for clinic_name, clinic_info in clinics.items():
+        available_slots = clinic_info.get('available_slots', {})
+        for date, times in available_slots.items():
+            for time in times:
+                appointment_datetime = datetime.datetime.strptime(f"{date} {time}", "%Y-%m-%d %I:%M %p")
+                all_appointments.append({
+                    'clinic_name': clinic_info['name'],
+                    'date': appointment_datetime.date(),
+                    'time': appointment_datetime.time()
+                })
+
+    # Sort appointments by date and time
+    all_appointments.sort(key=lambda x: (x['date'], x['time']))
+
+    # Filter appointments based on date selector
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    if start_date and end_date:
+        start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+        all_appointments = [appointment for appointment in all_appointments
+                            if start_date <= appointment['date'] <= end_date]
+
+    # Filter appointments based on time preference
+    time_filter = request.args.get('time_filter')
+    if time_filter in ['morning', 'afternoon', 'evening']:
+        all_appointments = [appointment for appointment in all_appointments if get_time_preference(appointment['time']) == time_filter]
+
+    return render_template('homepage.html', appointments=all_appointments, clinics=clinics)
+
+
+def get_time_preference(time):
+    hour = time.hour
+    if hour < 12:
+        return 'morning'
+    elif hour < 17:
+        return 'afternoon'
+    else:
+        return 'evening'
 
 @app.route('/<clinic>/booking', methods=['GET', 'POST'])
 def clinic_booking(clinic):
